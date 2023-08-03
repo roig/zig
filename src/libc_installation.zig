@@ -34,6 +34,7 @@ pub const LibCInstallation = struct {
         LibCKernel32LibNotFound,
         UnsupportedArchitecture,
         WindowsSdkNotFound,
+        DarwinSdkNotFound,
         ZigIsTheCCompiler,
     };
 
@@ -172,6 +173,7 @@ pub const LibCInstallation = struct {
 
     pub const FindNativeOptions = struct {
         allocator: Allocator,
+        target: std.Target,
 
         /// If enabled, will print human-friendly errors to stderr.
         verbose: bool = false,
@@ -182,7 +184,19 @@ pub const LibCInstallation = struct {
         var self: LibCInstallation = .{};
 
         if (is_darwin) {
-            @panic("Darwin is handled separately via std.zig.system.darwin module");
+            if (!std.zig.system.darwin.isDarwinSDKInstalled(args.allocator))
+                return error.DarwinSdkNotFound;
+            const sdk = std.zig.system.darwin.getDarwinSDK(args.allocator, args.target) orelse
+                return error.DarwinSdkNotFound;
+            defer args.allocator.free(sdk.path);
+
+            self.include_dir = try fs.path.join(args.allocator, &.{
+                sdk.path, "usr/include",
+            });
+            self.sys_include_dir = try fs.path.join(args.allocator, &.{
+                sdk.path, "usr/include",
+            });
+            return self;
         } else if (is_windows) {
             if (!build_options.have_llvm)
                 return error.WindowsSdkNotFound;
